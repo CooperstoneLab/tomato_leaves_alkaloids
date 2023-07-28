@@ -1,0 +1,232 @@
+---
+title: "Results visualization"
+author: "Danielito Quiroz and Jessica Cooperstone"
+output:
+  html_document:
+    df_print: paged
+---
+
+
+# Objective of this notebook
+
+In this notebook, you will find common and useful visualization results
+from the data obtained in the 
+[Alkaloid extraction report](https://github.com/CooperstoneLab/tomato_leaves_alkaloids/blob/main/Alkaloids_report.ipynb)
+
+# Loading libraries
+
+This section contains the libraries requiered in order to conduct the data
+analysis and visualization part of this notebook.
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+library(tidyverse)
+library(plotly)
+library(DT)
+library(factoextra)
+library(FactoMineR)
+library(patchwork)
+library(GGally)
+```
+
+
+# Importing data
+
+Here, we are going to import the short version of the results provided by
+ms-mint.
+
+```{r message=FALSE, warning=FALSE}
+alkaloids_area <- read_csv("Results/All_samples_fixed_rt.csv")
+```
+
+Now that we have our data in memory, we can display it.
+
+```{r echo=FALSE}
+glimpse(alkaloids_area[seq(3),])
+```
+
+
+# Formatting the table
+
+As we see in the ms_file_name, that is the sample concatenated name that includes
+the *Specie*, *Replicate*, *Polarity*, and *Injection number*. In the last column,
+`Sample`, the specie acronym is shown. At this point, the table is not intuitive,
+and we are going to work on this.
+
+## Extracting useful information form `Sample`
+
+```{r}
+alkaloids_clean <- alkaloids_area %>% 
+  separate(ms_file_label, 
+           into = c("Specie", "Replicate", "Polarity", "InjectionNumber"),
+           remove = F) %>% 
+  select(-Sample, -Polarity, -`...1`) %>% 
+  rename(Alkaloid = peak_label, TargetIon = mz_mean, Area = peak_area) %>% 
+  select(ms_file_label, Specie, Replicate, InjectionNumber, 
+         TargetIon, Alkaloid, Area) %>% 
+  mutate(Replicate = factor(Replicate, levels = seq(10)))
+```
+
+
+Now that we have a cleaner table, we are able to display a better column
+named table.
+
+> Remember to use the search bar to look for specific results.
+
+```{r echo=FALSE}
+DT::datatable(alkaloids_clean %>% select(-ms_file_label))
+```
+
+
+
+
+# Visualizations
+
+## Barplot - Absolute peak are
+
+The first bar plot refers to the absolute peak are quantified by sample and
+alkaloid.
+
+```{r out.width = "100%", out.height="7in"}
+bar_alkaloids_absol <- alkaloids_clean %>% 
+  filter(!(Specie %in% "OH8243Fruit")) %>% 
+  ggplot(aes(Replicate, Area, fill = Alkaloid)) +
+  geom_col() +
+  facet_wrap("Specie", ncol = 5) +
+  theme_classic() +
+  labs(x = "Replicate number", y = "Peak area",
+       title = "Barplot of peak area per alkaloid")
+
+bar_alkaloids_absol %>% ggplotly
+```
+
+
+
+## Barplot - Relative peak are
+
+In contrast to the previous plot, where the bar height represents the area
+observed in each sample, the following plot represent the relative alkaloid
+content per sample. This plot serves merely to address visual comparison per sample,
+and not between samples, since the bar height was normalized.
+
+```{r out.width = "100%", out.height="7in"}
+bar_alkaloids_rel <- alkaloids_clean %>% 
+  filter(!(Specie %in% "OH8243Fruit")) %>% 
+  ggplot(aes(Replicate, Area, fill = Alkaloid)) +
+  geom_col(position = "fill") +
+  facet_wrap("Specie", ncol = 5) +
+  theme_classic() +
+  labs(x = "Replicate number", y = "Relative peak area",
+       title = "Barplot of relative peak area per alkaloid")
+
+bar_alkaloids_rel %>% ggplotly
+```
+
+
+
+# PCA
+The following section will be based on the following 
+[documentation](http://www.sthda.com/english/wiki/factoextra-r-package-easy-multivariate-data-analyses-and-elegant-visualization).
+
+```{r}
+alkaloids_wide <-  alkaloids_clean %>% select(-TargetIon) %>% 
+  filter(!(Specie %in% "OH8243Fruit")) %>% 
+  pivot_wider(names_from = Alkaloid, values_from = Area, values_fill = 0)
+```
+
+## Exporting wide alkaloid data
+
+```{r}
+write.csv(alkaloids_wide, file = "Results/wide_Alkaloids_allSamples.csv", row.names = F)
+```
+
+
+## Conducting PCA
+
+> Centered
+> Not scaled
+
+```{r}
+alkaloids_only <- alkaloids_wide %>% 
+  select(Dehydrotomatine:LycoEscu_rt2p4)
+
+alkaloids_pca <- PCA(alkaloids_only, graph = FALSE)
+```
+
+## Eigenvalues/variances plot
+
+```{r}
+fviz_screeplot(alkaloids_pca, addlabels = TRUE, ylim = c(0, 40))
+```
+
+
+## Variable/Alkaloid contribution for dimensionality reduction
+
+```{r}
+vars_info <- get_pca_var(alkaloids_pca)
+vars_info$contrib %>% as.data.frame() %>% 
+  select(PC1 = Dim.1, PC2 = Dim.2, PC3 = Dim.3, PC4 = Dim.4) %>% 
+  arrange(-PC1, -PC2, -PC3) %>% DT::datatable()
+```
+
+
+
+## Variable/Alkaloid contribution plot
+
+```{r}
+fviz_pca_var(alkaloids_pca, col.var="contrib",
+             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
+             repel = T # Avoid text overlapping
+) + labs(x = "PC1 (36.4%)", y = "PC2 (26.2%)", color = "Contribution")
+
+```
+
+## Top 5 alkaloids contribution to sample differentiation in the first 2 PC
+
+
+```{r}
+# Contributions of variables to PC1
+top5_pc1 <- fviz_contrib(alkaloids_pca, choice = "var", axes = 1, top = 5)
+# Contributions of variables to PC2
+top5_pc2 <- fviz_contrib(alkaloids_pca, choice = "var", axes = 2, top = 5)
+
+top5_pc1 + top5_pc2
+```
+
+## Scores plot
+
+```{r}
+sample_scores <- alkaloids_pca$ind$coord %>% data.frame() #Coordinates
+names(sample_scores) <- paste0("PC", seq(5))
+alkaloids_scores <- bind_cols(alkaloids_wide, sample_scores)
+```
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE, out.width="100%"}
+# Impossible to color by Specie and add a legend
+ggpairs(alkaloids_scores, columns = 16:20,
+        upper = list(continuous = "points", combo = "box_no_facet"),
+        lower = list(continuous = "points", combo = "dot_no_facet"))
+```
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+alkaloids_scores %>% 
+  plot_ly() %>% 
+  add_trace(x = ~PC1, y = ~PC2, color = ~Specie,
+            text = ~paste("Specie: ", Specie,
+                          "<br>Replicate: ", Replicate,
+                          "<br>Dehydrotomatine: ", Dehydrotomatine,
+                          "<br>alpha-Tomatine: ", `alpha-Tomatine`,
+                          "<br>Tomatidine: ", Tomatidine,
+                          "<br>Hydroxytomatine_range: ", Hydroxytomatine_range,
+                          "<br>Acetoxytomatine_II_rt4p4", Acetoxytomatine_II_rt4p4,
+                          "<br>Acetoxytomatine_II_rt5p3", Acetoxytomatine_II_rt5p3,
+                          "<br>Acetoxytomatine_II_rt5p4: ", Acetoxytomatine_II_rt5p4,
+                          "<br>EsculeosideB_rt2p2: ", EsculeosideB_rt2p2,
+                          "<br>EsculeosideB_rt2p3: ", EsculeosideB_rt2p3,
+                          "<br>LycoEscu_rt3p3", LycoEscu_rt3p3,
+                          "<br>LycoEscu_rt2p4", LycoEscu_rt2p4) )
+```
+
+
+```{r}
+sessionInfo()
+```
+

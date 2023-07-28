@@ -2,3 +2,4 @@
 *.virtual_documents/*
 .ipynb_checkpoints
 **/*.ipynb_checkpoints/
+Alkaloids_visualization.nb.html
