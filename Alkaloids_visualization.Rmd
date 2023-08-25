@@ -81,7 +81,7 @@ DT::datatable(alkaloids_clean %>% select(-ms_file_label))
 
 # Visualizations
 
-## Barplot - Absolute peak are
+## Barplot - Absolute peak area
 
 The first bar plot refers to the absolute peak are quantified by sample and
 alkaloid.
@@ -101,7 +101,7 @@ bar_alkaloids_absol %>% ggplotly
 
 
 
-## Barplot - Relative peak are
+## Barplot - Relative peak area
 
 In contrast to the previous plot, where the bar height represents the area
 observed in each sample, the following plot represent the relative alkaloid
